@@ -56,7 +56,6 @@ type Props = {
 
 type State = {
   text: string,
-  inputWidth: ?number,
   lines: number,
 };
 
@@ -90,15 +89,12 @@ class TagInput extends Component {
   props: Props;
   state: State = {
     text: '',
-    inputWidth: null,
     lines: 1,
   };
 
   wrapperWidth = width;
 
-  // scroll to bottom
   contentHeight: 0;
-  scrollViewHeight: 0;
 
   static defaultProps = {
     tagColor: '#dddddd',
@@ -113,7 +109,6 @@ class TagInput extends Component {
 
     this.refs.wrapper.measure((ox, oy, w, /*h, px, py*/) => {
       this.wrapperWidth = w;
-      this.setState({ inputWidth: this.wrapperWidth });
     });
   };
 
@@ -125,20 +120,18 @@ class TagInput extends Component {
       this.refs['tag' + (this.props.value.length - 1)].measure((ox, oy, w, /*h, px, py*/) => {
         const endPosOfTag = w + ox;
         const margin = 3;
-        const spaceLeft = this.wrapperWidth - endPosOfTag - margin - 10;
+        const spaceLeft = this.wrapperWidth - endPosOfTag - margin;
 
-        const inputWidth = (spaceLeft < 100) ? this.wrapperWidth : spaceLeft - 10;
+        if (spaceLeft > 100) {
+          return;
+        }
 
-        if (spaceLeft < 100) {
-          if (this.state.lines < this.props.numberOfLines) {
-            const lines = this.state.lines + 1;
+        if (this.state.lines < this.props.numberOfLines) {
+          const lines = this.state.lines + 1;
 
-            this.setState({ inputWidth, lines });
-          } else {
-            this.setState({ inputWidth }, () => this.scrollToBottom());
-          }
+          this.setState({ lines });
         } else {
-          this.setState({ inputWidth });
+          this.scrollToBottom();
         }
       });
     }, 0);
@@ -185,6 +178,7 @@ class TagInput extends Component {
 
     const { value } = this.props;
     const regex = this.props.regex || DEFAULT_TAG_REGEX;
+    console.log(text)
     const results = text.match(regex);
 
     if (results && results.length > 0) {
@@ -231,9 +225,9 @@ class TagInput extends Component {
   };
 
   scrollToBottom = (animated: boolean = true) => {
-    if (this.contentHeight > this.scrollViewHeight) {
+    if (this.contentHeight > this.state.scrollViewHeight) {
       this.refs.scrollView.scrollTo({
-        y: this.contentHeight - this.scrollViewHeight,
+        y: this.contentHeight - this.state.scrollViewHeight,
         animated,
       });
     }
@@ -256,9 +250,8 @@ class TagInput extends Component {
   };
 
   _renderInput = () => {
-    const { text, inputWidth } = this.state;
+    const { text } = this.state;
     const { inputColor } = this.props;
-    const width = inputWidth ? inputWidth : 400;
 
     const defaultInputProps = {
       autoCapitalize: 'none',
@@ -272,12 +265,11 @@ class TagInput extends Component {
       onKeyPress: this.onKeyPress,
       value: text,
       style: [styles.textInput, {
-        width: width,
+        width: 185,
         color: inputColor,
       }],
       onChange: this.onChange,
       onBlur: this.onBlur,
-      onSubmitEditing: this.parseTags,
     };
 
     const inputProps = { ...defaultInputProps, ...this.props.inputProps };
@@ -287,17 +279,14 @@ class TagInput extends Component {
     }
 
     return (
-      <TextInput
-        {...inputProps}
-      />
+      <TextInput {...inputProps} />
     );
   };
 
   render() {
     const { lines } = this.state;
     const { value } = this.props;
-
-    const wrapperHeight = (lines - 1) * 40 + 36;
+    const maxScrollViewHeight = this.props.numberOfLines * 40
 
     return (
       <TouchableWithoutFeedback
@@ -305,20 +294,25 @@ class TagInput extends Component {
         onLayout={this.measureWrapper}
         style={[styles.container]}>
         <View
-          style={[styles.wrapper,{height: wrapperHeight}]}
+          style={[styles.wrapper]}
           ref="wrapper"
           onLayout={this.measureWrapper}>
+          <View style={styles.textInputContainer}>
+            {this._renderInput()}
+          </View>
           <ScrollView
             ref='scrollView'
-            style={styles.tagInputContainerScroll}
-            onContentSizeChange={(w, h) => this.contentHeight = h}
-            onLayout={ev => this.scrollViewHeight = ev.nativeEvent.layout.height}
+            style={[styles.tagInputContainerScroll, {height: this.state.scrollViewHeight}]}
+            onContentSizeChange={(width, height) => {
+              this.contentHeight = height
+              this.setState({scrollViewHeight: Math.min(height, maxScrollViewHeight)})
+              if (height > maxScrollViewHeight) {
+                this.scrollToBottom()
+              }
+            }}
           >
             <View style={styles.tagInputContainer}>
               {value.map((tag, index) => this._renderTag(tag, index))}
-              <View style={[styles.textInputContainer, { width: this.state.inputWidth }]}>
-                {this._renderInput()}
-              </View>
             </View>
           </ScrollView>
         </View>
@@ -330,16 +324,18 @@ class TagInput extends Component {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    marginBottom: 5,
   },
   wrapper: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'column',
     marginTop: 3,
     marginBottom: 2,
     alignItems: 'flex-start',
   },
   tagInputContainerScroll: {
     flex: 1,
+    width: 300
   },
   tagInputContainer: {
     flex: 1,
@@ -354,7 +350,8 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   textInputContainer: {
-    height: 36,
+    flex: 1,
+    width: 300
   },
   tag: {
     justifyContent: 'center',
